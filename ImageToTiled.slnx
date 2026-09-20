@@ -1,9 +1,0 @@
-<Solution>
-  <Folder Name="/src/">
-    <Project Path="src/ImageToTiled.Cli/ImageToTiled.Cli.csproj" />
-    <Project Path="src/ImageToTiled/ImageToTiled.csproj" />
-  </Folder>
-  <Folder Name="/test/">
-    <Project Path="test/ImageToTiled.Tests/ImageToTiled.Tests.csproj" />
-  </Folder>
-</Solution>
