@@ -4,9 +4,9 @@ public sealed record OptimizationOptions
 {
     /// <summary>
     /// Maximum allowed difference per RGB channel (0..255) for two tiles to be merged.
-    /// Default is 15.
+    /// Default is 40.
     /// </summary>
-    public int Tolerance { get; init; } = 15;
+    public int Tolerance { get; init; } = 40;
 
     /// <summary>
     /// Alpha threshold (0..255) for transparency detection and noise filtering.
@@ -26,8 +26,15 @@ public sealed record OptimizationOptions
     public string? OutputDirectory { get; init; }
 
     /// <summary>
-    /// Whether to preserve tiles in the tileset that are not used in any layer of the map.
-    /// Default is false (unused tiles are pruned).
+    /// How to handle transparent tiles:
+    /// Gid0 (default): Empty cells become GID 0 in the map, and no transparent blank tile is stored in the tileset.
+    /// Tile: A blank transparent tile is reserved at tile 0 (GID 1).
+    /// </summary>
+    public EmptyMode EmptyMode { get; init; } = EmptyMode.Gid0;
+
+    /// <summary>
+    /// Whether to preserve tiles in the tileset that are not used in any visual layer of the map.
+    /// Default is false (unused tiles are pruned from the tileset).
     /// </summary>
     public bool PreserveUnusedTiles { get; init; }
 

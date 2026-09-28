@@ -108,11 +108,15 @@ public static class TiledMapOptimizer
             }
         }
 
-        // Scan all layers to find used GIDs
-        var usedGids = new HashSet<int>();
-        var layers = mapRoot.Elements("layer").ToList();
+        // Separate visual tile layers from collision layers
+        var allLayers = mapRoot.Elements("layer").ToList();
+        var visualLayers = allLayers
+            .Where(l => !string.Equals(l.Attribute("name")?.Value, "collision", StringComparison.OrdinalIgnoreCase))
+            .ToList();
 
-        foreach (var layer in layers)
+        // Scan visual layers to find used GIDs
+        var usedGids = new HashSet<int>();
+        foreach (var layer in visualLayers)
         {
             var data = layer.Element("data");
             if (data == null || data.Attribute("encoding")?.Value != "csv")
@@ -144,21 +148,17 @@ public static class TiledMapOptimizer
         var canonicalTiles = new List<Tile>();
         var remap = new Dictionary<int, int>
         {
-            [0] = 0 // empty cell remains 0
+            [0] = 0 // empty cell remains GID 0
         };
 
-        // If tile 0 is empty/transparent, preserve it at canonical tile 0 (maps to GID = firstGid)
-        var tile0IsEmpty = originalTiles.Count > 0 && originalTiles[0].IsTransparent(null, options.AlphaThreshold);
-        if (tile0IsEmpty)
+        // If EmptyMode is Tile, preserve an empty tile at canonical index 0 (GID = firstGid)
+        if (options.EmptyMode == EmptyMode.Tile)
         {
-            canonicalTiles.Add(originalTiles[0]);
+            canonicalTiles.Add(Tile.CreateEmpty(tileWidth, tileHeight));
             remap[firstGid] = firstGid;
         }
 
-        var startIndex = tile0IsEmpty ? 1 : 0;
-        var canonicalStartIndex = tile0IsEmpty ? 1 : 0;
-
-        for (var i = startIndex; i < originalTiles.Count; i++)
+        for (var i = 0; i < originalTiles.Count; i++)
         {
             var oldGid = firstGid + i;
 
@@ -169,9 +169,24 @@ public static class TiledMapOptimizer
             }
 
             var tile = originalTiles[i];
-            var matchedIndex = -1;
+            var isTransparent = tile.IsTransparent(null, options.AlphaThreshold);
 
-            for (var k = canonicalStartIndex; k < canonicalTiles.Count; k++)
+            if (isTransparent && options.EmptyMode == EmptyMode.Gid0)
+            {
+                // Cell becomes empty cell GID 0; do not store in tileset
+                remap[oldGid] = 0;
+                continue;
+            }
+
+            if (isTransparent && options.EmptyMode == EmptyMode.Tile)
+            {
+                remap[oldGid] = firstGid;
+                continue;
+            }
+
+            var matchedIndex = -1;
+            var searchStart = (options.EmptyMode == EmptyMode.Tile) ? 1 : 0;
+            for (var k = searchStart; k < canonicalTiles.Count; k++)
             {
                 if (tile.Matches(canonicalTiles[k], options.Tolerance, options.AlphaThreshold))
                 {
@@ -188,6 +203,42 @@ public static class TiledMapOptimizer
             {
                 canonicalTiles.Add(tile);
                 remap[oldGid] = firstGid + canonicalTiles.Count - 1;
+            }
+        }
+
+        // Ensure absolutely NO unused tiles in tileset when PreserveUnusedTiles is false
+        if (!options.PreserveUnusedTiles && canonicalTiles.Count > 0)
+        {
+            var referencedNewGids = usedGids
+                .Select(g => remap.TryGetValue(g, out var mapped) ? mapped : 0)
+                .Where(g => g >= firstGid)
+                .ToHashSet();
+
+            if (referencedNewGids.Count < canonicalTiles.Count)
+            {
+                var compactCanonical = new List<Tile>();
+                var secondRemap = new Dictionary<int, int> { [0] = 0 };
+
+                for (var k = 0; k < canonicalTiles.Count; k++)
+                {
+                    var canonicalGid = firstGid + k;
+                    if (referencedNewGids.Contains(canonicalGid))
+                    {
+                        compactCanonical.Add(canonicalTiles[k]);
+                        secondRemap[canonicalGid] = firstGid + compactCanonical.Count - 1;
+                    }
+                    else
+                    {
+                        secondRemap[canonicalGid] = 0;
+                    }
+                }
+
+                foreach (var key in remap.Keys.ToList())
+                {
+                    remap[key] = secondRemap.TryGetValue(remap[key], out var finalGid) ? finalGid : 0;
+                }
+
+                canonicalTiles = compactCanonical;
             }
         }
 
@@ -211,7 +262,8 @@ public static class TiledMapOptimizer
         // Determine new tileset dimensions
         var newColumns = options.Columns ?? originalColumns;
         if (newColumns <= 0) newColumns = 16;
-        var newRows = Math.Max(1, (int)Math.Ceiling((double)canonicalTiles.Count / newColumns));
+        var canonicalCount = Math.Max(1, canonicalTiles.Count);
+        var newRows = Math.Max(1, (int)Math.Ceiling((double)canonicalCount / newColumns));
         var newTileCount = newColumns * newRows;
 
         // Pack new tileset sheet
@@ -248,9 +300,9 @@ public static class TiledMapOptimizer
             tsxDoc.Save(writer);
         }
 
-        // Update TMX layer data
+        // Update ONLY visual TMX layers (leaving collision and other layers untouched)
         var layersUpdated = 0;
-        foreach (var layer in layers)
+        foreach (var layer in visualLayers)
         {
             var data = layer.Element("data");
             if (data == null || data.Attribute("encoding")?.Value != "csv")
@@ -301,6 +353,9 @@ public static class TiledMapOptimizer
         }
 
         var relTsx = Path.GetRelativePath(Path.GetDirectoryName(outTmxPath)!, outTsxPath).Replace('\\', '/');
+        tilesetElem.RemoveNodes();
+        tilesetElem.RemoveAttributes();
+        tilesetElem.SetAttributeValue("firstgid", firstGid);
         tilesetElem.SetAttributeValue("source", relTsx);
 
         using (var writer = XmlWriter.Create(outTmxPath, xmlSettings))
@@ -317,12 +372,26 @@ public static class TiledMapOptimizer
                 var oldGid = kvp.Key;
                 var newGid = kvp.Value;
 
-                if (oldGid >= firstGid && oldGid < firstGid + originalTiles.Count &&
-                    newGid >= firstGid && newGid < firstGid + canonicalTiles.Count)
+                if (oldGid < firstGid || oldGid >= firstGid + originalTiles.Count)
                 {
-                    var oldTile = originalTiles[oldGid - firstGid];
-                    var newTile = canonicalTiles[newGid - firstGid];
+                    continue;
+                }
 
+                var oldTile = originalTiles[oldGid - firstGid];
+
+                if (newGid == 0)
+                {
+                    if (!oldTile.IsTransparent(null, options.AlphaThreshold))
+                    {
+                        verified = false;
+                        throw new InvalidOperationException($"Verification failed: Non-transparent old GID {oldGid} mapped to empty GID 0.");
+                    }
+                    continue;
+                }
+
+                if (newGid >= firstGid && newGid < firstGid + canonicalTiles.Count)
+                {
+                    var newTile = canonicalTiles[newGid - firstGid];
                     if (!oldTile.Matches(newTile, options.Tolerance, options.AlphaThreshold))
                     {
                         verified = false;

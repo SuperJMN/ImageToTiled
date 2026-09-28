@@ -51,12 +51,20 @@ public static class Program
             cols = c;
         }
 
+        var emptyMode = opts.EmptyMode?.Trim().ToLowerInvariant() switch
+        {
+            "tile" => EmptyMode.Tile,
+            "none" => EmptyMode.None,
+            _ => EmptyMode.Gid0
+        };
+
         var optOptions = new OptimizationOptions
         {
-            Tolerance = opts.Tolerance > 0 ? opts.Tolerance : 15,
+            Tolerance = opts.Tolerance > 0 ? opts.Tolerance : 40,
             AlphaThreshold = opts.AlphaThreshold,
             Columns = cols,
             OutputDirectory = opts.OutputDirectory,
+            EmptyMode = emptyMode,
             PreserveUnusedTiles = opts.PreserveUnused,
             Verify = !opts.NoVerify
         };
