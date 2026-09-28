@@ -4,9 +4,9 @@ public sealed record OptimizationOptions
 {
     /// <summary>
     /// Maximum allowed difference per RGB channel (0..255) for two tiles to be merged.
-    /// Default is 40.
+    /// Default is 55.
     /// </summary>
-    public int Tolerance { get; init; } = 40;
+    public int Tolerance { get; init; } = 55;
 
     /// <summary>
     /// Alpha threshold (0..255) for transparency detection and noise filtering.

@@ -60,7 +60,7 @@ public static class Program
 
         var optOptions = new OptimizationOptions
         {
-            Tolerance = opts.Tolerance > 0 ? opts.Tolerance : 40,
+            Tolerance = opts.Tolerance > 0 ? opts.Tolerance : 55,
             AlphaThreshold = opts.AlphaThreshold,
             Columns = cols,
             OutputDirectory = opts.OutputDirectory,
