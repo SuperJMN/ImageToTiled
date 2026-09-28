@@ -21,7 +21,7 @@ public sealed class Tile : IEquatable<Tile>
         hashCode = ComputeHash(pixelBytes);
     }
 
-    public static Tile FromImage(Image<Rgba32> image, int startX, int startY, int width, int height)
+    public static Tile FromImage(Image<Rgba32> image, int startX, int startY, int width, int height, int alphaThreshold = 0)
     {
         var bytes = new byte[width * height * 4];
         var offset = 0;
@@ -34,10 +34,28 @@ public sealed class Tile : IEquatable<Tile>
                 for (var x = 0; x < width; x++)
                 {
                     var pixel = row[startX + x];
+                    var a = pixel.A;
+
+                    if (alphaThreshold > 0)
+                    {
+                        if (a <= alphaThreshold)
+                        {
+                            bytes[offset++] = 0;
+                            bytes[offset++] = 0;
+                            bytes[offset++] = 0;
+                            bytes[offset++] = 0;
+                            continue;
+                        }
+                        if (a >= 255 - alphaThreshold)
+                        {
+                            a = 255;
+                        }
+                    }
+
                     bytes[offset++] = pixel.R;
                     bytes[offset++] = pixel.G;
                     bytes[offset++] = pixel.B;
-                    bytes[offset++] = pixel.A;
+                    bytes[offset++] = a;
                 }
             }
         });
@@ -51,12 +69,12 @@ public sealed class Tile : IEquatable<Tile>
         return new Tile(width, height, bytes);
     }
 
-    public bool IsTransparent(Rgba32? colorKey = null)
+    public bool IsTransparent(Rgba32? colorKey = null, int alphaThreshold = 0)
     {
         for (var i = 0; i < pixelBytes.Length; i += 4)
         {
             var a = pixelBytes[i + 3];
-            if (a > 0)
+            if (a > alphaThreshold)
             {
                 if (colorKey.HasValue)
                 {
@@ -71,6 +89,48 @@ public sealed class Tile : IEquatable<Tile>
                 return false;
             }
         }
+        return true;
+    }
+
+    public bool Matches(Tile other, int tolerance, int alphaThreshold = 0)
+    {
+        if (ReferenceEquals(this, other)) return true;
+        if (Width != other.Width || Height != other.Height) return false;
+
+        var spanA = pixelBytes.AsSpan();
+        var spanB = other.pixelBytes.AsSpan();
+
+        if (tolerance == 0)
+        {
+            return hashCode == other.hashCode && spanA.SequenceEqual(spanB);
+        }
+
+        for (var i = 0; i < spanA.Length; i += 4)
+        {
+            var aA = spanA[i + 3];
+            var aB = spanB[i + 3];
+
+            var isTransA = aA <= alphaThreshold;
+            var isTransB = aB <= alphaThreshold;
+
+            if (isTransA && isTransB)
+            {
+                continue;
+            }
+
+            if (isTransA != isTransB)
+            {
+                return false;
+            }
+
+            if (Math.Abs(spanA[i] - spanB[i]) > tolerance ||
+                Math.Abs(spanA[i + 1] - spanB[i + 1]) > tolerance ||
+                Math.Abs(spanA[i + 2] - spanB[i + 2]) > tolerance)
+            {
+                return false;
+            }
+        }
+
         return true;
     }
 

@@ -79,6 +79,8 @@ public static class Program
                 TilesetImageName = opts.TilesetImage,
                 TmxName = opts.Tmx,
                 TsxName = opts.Tsx,
+                Tolerance = opts.Tolerance,
+                AlphaThreshold = opts.AlphaThreshold,
                 Overwrite = opts.Force,
                 Verify = !opts.NoVerify,
             };
@@ -90,13 +92,16 @@ public static class Program
             Console.WriteLine($"  Tile Size:        {tileW}x{tileH} px");
             Console.WriteLine($"  Map Dimensions:   {result.MapWidth}x{result.MapHeight} tiles ({result.MapWidth * result.MapHeight} total cells)");
             Console.WriteLine($"  Empty Mode:       {opts.EmptyMode} ({result.TransparentCellsCount} transparent cells)");
+            Console.WriteLine($"  Tolerance:        {opts.Tolerance} (alpha threshold: {opts.AlphaThreshold})");
             Console.WriteLine($"  Unique Tiles:     {result.UniqueTilesCount} (sheet: {result.TilesetColumns} cols x {result.TilesetRows} rows = {result.TileCount} slots)");
             Console.WriteLine($"  Tileset Image:    {result.TilesetImagePath}");
             Console.WriteLine($"  Tileset (TSX):    {result.TsxPath}");
             Console.WriteLine($"  Map (TMX):        {result.TmxPath}");
             if (result.VerifiedLossless)
             {
-                Console.WriteLine("  Pixel Fidelity:   100% LOSSLESS MATCH (Verified)");
+                Console.WriteLine(opts.Tolerance == 0
+                    ? "  Pixel Fidelity:   100% EXACT LOSSLESS MATCH (Verified)"
+                    : $"  Pixel Fidelity:   VERIFIED (all pixels match within tolerance {opts.Tolerance})");
             }
 
             return 0;

@@ -8,7 +8,7 @@ Diseñada específicamente para flujos de trabajo de desarrollo retro con [Retro
 
 ## Características
 
-- **Deduplicación exacta de tiles**: Divide la imagen en teselas (por defecto 16×16 px) e identifica tiles idénticos mediante hashing FNV-1a y comparación de bytes.
+- **Deduplicación exacta e inteligente de tiles**: Divide la imagen en teselas (por defecto 16×16 px) e identifica tiles idénticos mediante hashing FNV-1a y comparación de bytes. Admite tolerancia por canal RGB (`--tolerance`) para fusionar teselas con ruido de compresión o cuantización de color, así como umbral de canal alfa (`--alpha-threshold`).
 - **Empaquetado de Tileset**: Genera una hoja de tiles compacta en PNG (por defecto a 16 columnas / 256 px de ancho, o configurable a disposición cuadrada).
 - **Formatos Tiled estándar**:
   - Archivo `.tsx` con especificación XML Tiled 1.10.
@@ -19,7 +19,7 @@ Diseñada específicamente para flujos de trabajo de desarrollo retro con [Retro
   - `None`: Las teselas transparentes se tratan como cualquier otro tile gráfico.
 - **Color Keying**: Soporte para definir un color cromático (ej. `#FF00FF`) que se convertirá en transparente.
 - **Propiedades RetroSharp**: Inclusión automática de propiedades personalizadas requeridas por el importador de mundos de RetroSharp (`retrosharpStreamY`, `retrosharpWorldY`, `retrosharpWorldHeight`).
-- **Verificación sin pérdidas**: Reconstruye la imagen completa a partir de los tiles generados y la cuadrícula del mapa, asegurando una coincidencia 100% idéntica píxel a píxel.
+- **Verificación sin pérdidas**: Reconstruye la imagen completa a partir de los tiles generados y la cuadrícula del mapa, asegurando una coincidencia idéntica dentro de la tolerancia configurada.
 
 ---
 
@@ -75,6 +75,8 @@ dotnet build -c Release
 | `--stream-y` | Valor de `retrosharpStreamY`. | `0` |
 | `--world-y` | Valor de `retrosharpWorldY`. | `0` |
 | `--world-height` | Valor de `retrosharpWorldHeight`. | Alto del mapa en tiles |
+| `-t, --tolerance` | Tolerancia de variación por canal RGB (0..255) para deduplicar teselas con ruido de compresión o redondeo. | `0` |
+| `--alpha-threshold` | Umbral de canal alfa (0..255). Alfa <= umbral se considera transparente; alfa >= 255 - umbral se considera opaco. | `16` |
 | `-f, --force` | Forzar sobreescritura si los archivos existen. | `false` |
 | `--no-verify` | Omitir la verificación de reconstrucción píxel a píxel. | `false` |
 
@@ -87,7 +89,17 @@ Genera `Part2.tmx`, `Part2.tsx` y `Part2_tiles.png` en el mismo directorio:
 dotnet run --project src/ImageToTiled.Cli -- /home/jmn/Escritorio/SMB2/Part2.png
 ```
 
-#### 2. Exportación a carpeta con empaquetado cuadrado
+#### 2. Deduplicación con tolerancia (imágenes con ruido o capturas de emulador)
+Para rips o capturas con ligeras variaciones de color o redondeo de 16 bits (como Super Mario Bros 2), usa `--tolerance 15` para colapsar teselas visualmente idénticas en un tileset óptimo:
+
+```bash
+dotnet run --project src/ImageToTiled.Cli -- /home/jmn/Escritorio/Part2-source.png \
+  -o /home/jmn/Escritorio/SMB2 \
+  -n Part2 \
+  -t 15
+```
+
+#### 3. Exportación a carpeta con empaquetado cuadrado
 ```bash
 dotnet run --project src/ImageToTiled.Cli -- /home/jmn/Escritorio/SMB2/Part2.png \
   -o ./assets/maps \
@@ -96,7 +108,7 @@ dotnet run --project src/ImageToTiled.Cli -- /home/jmn/Escritorio/SMB2/Part2.png
   --empty-mode tile
 ```
 
-#### 3. Uso con Color Key (ej. Magenta) y modo Gid0
+#### 4. Uso con Color Key (ej. Magenta) y modo Gid0
 ```bash
 dotnet run --project src/ImageToTiled.Cli -- sprite_sheet.png \
   --color-key "#FF00FF" \

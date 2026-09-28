@@ -129,8 +129,8 @@ public static class ImageToTiledConverter
         {
             for (var c = 0; c < mapWidth; c++)
             {
-                var tile = Tile.FromImage(processedImage, c * tileWidth, r * tileHeight, tileWidth, tileHeight);
-                var isTrans = tile.IsTransparent(options.ColorKey);
+                var tile = Tile.FromImage(processedImage, c * tileWidth, r * tileHeight, tileWidth, tileHeight, options.AlphaThreshold);
+                var isTrans = tile.IsTransparent(options.ColorKey, options.AlphaThreshold);
                 if (isTrans)
                 {
                     transparentCellsCount++;
@@ -146,13 +146,38 @@ public static class ImageToTiledConverter
                 }
                 else
                 {
-                    if (!tileToGid.TryGetValue(tile, out var gid))
+                var matchedGid = -1;
+
+                if (tileToGid.TryGetValue(tile, out var cachedGid))
+                {
+                    matchedGid = cachedGid;
+                }
+                else if (options.Tolerance > 0)
+                {
+                    // Check if matches an existing unique tile within tolerance
+                    var startIndex = (options.EmptyMode == EmptyMode.Tile ? 1 : 0);
+                    for (var i = startIndex; i < uniqueTiles.Count; i++)
                     {
-                        uniqueTiles.Add(tile);
-                        gid = uniqueTiles.Count; // 1-based GID
-                        tileToGid[tile] = gid;
+                        if (tile.Matches(uniqueTiles[i], options.Tolerance, options.AlphaThreshold))
+                        {
+                            matchedGid = i + 1; // 1-based GID
+                            tileToGid[tile] = matchedGid; // Cache match for future identical tiles
+                            break;
+                        }
                     }
-                    grid[r, c] = gid;
+                }
+
+                if (matchedGid == -1)
+                {
+                    uniqueTiles.Add(tile);
+                    var newGid = uniqueTiles.Count; // 1-based GID
+                    tileToGid[tile] = newGid;
+                    grid[r, c] = newGid;
+                }
+                else
+                {
+                    grid[r, c] = matchedGid;
+                }
                 }
             }
         }
@@ -270,7 +295,26 @@ public static class ImageToTiledConverter
                     var reconRow = reconAccessor.GetRowSpan(y);
                     for (var x = 0; x < origAccessor.Width; x++)
                     {
-                        if (origRow[x] != reconRow[x])
+                        var orig = origRow[x];
+                        var recon = reconRow[x];
+
+                        var isOrigTrans = orig.A <= options.AlphaThreshold;
+                        var isReconTrans = recon.A <= options.AlphaThreshold;
+
+                        if (isOrigTrans && isReconTrans)
+                        {
+                            continue;
+                        }
+
+                        if (isOrigTrans != isReconTrans)
+                        {
+                            verified = false;
+                            return;
+                        }
+
+                        if (Math.Abs(orig.R - recon.R) > options.Tolerance ||
+                            Math.Abs(orig.G - recon.G) > options.Tolerance ||
+                            Math.Abs(orig.B - recon.B) > options.Tolerance)
                         {
                             verified = false;
                             return;
@@ -281,7 +325,7 @@ public static class ImageToTiledConverter
 
             if (!verified)
             {
-                throw new InvalidOperationException("Verification failed: Reconstructed map image does not match source image pixels!");
+                throw new InvalidOperationException("Verification failed: Reconstructed map image does not match source image pixels within tolerance!");
             }
         }
 

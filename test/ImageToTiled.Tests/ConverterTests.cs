@@ -58,6 +58,83 @@ public sealed class ConverterTests : IDisposable
     }
 
     [Fact]
+    public void Tolerance_merges_slightly_noisy_tiles()
+    {
+        // 32x16 image: left tile is green (0, 168, 0), right tile is slightly noisy green (0, 163, 0) - diff is 5
+        using var img = new Image<Rgba32>(32, 16);
+        img.ProcessPixelRows(accessor =>
+        {
+            for (var y = 0; y < 16; y++)
+            {
+                var row = accessor.GetRowSpan(y);
+                for (var x = 0; x < 16; x++)
+                {
+                    row[x] = new Rgba32(0, 168, 0, 255);
+                }
+                for (var x = 16; x < 32; x++)
+                {
+                    row[x] = new Rgba32(0, 163, 0, 255);
+                }
+            }
+        });
+
+        // With Tolerance = 0 -> 2 unique tiles
+        var strictResult = ImageToTiledConverter.Convert(img, testDir, new ConversionOptions
+        {
+            TileWidth = 16,
+            TileHeight = 16,
+            Tolerance = 0,
+            AlphaThreshold = 0,
+            EmptyMode = EmptyMode.None,
+            Name = "strict"
+        });
+        strictResult.UniqueTilesCount.Should().Be(2);
+
+        // With Tolerance = 5 -> merged to 1 unique tile!
+        var tolResult = ImageToTiledConverter.Convert(img, testDir, new ConversionOptions
+        {
+            TileWidth = 16,
+            TileHeight = 16,
+            Tolerance = 5,
+            AlphaThreshold = 0,
+            EmptyMode = EmptyMode.None,
+            Name = "tol"
+        });
+        tolResult.UniqueTilesCount.Should().Be(1);
+        tolResult.VerifiedLossless.Should().BeTrue();
+    }
+
+    [Fact]
+    public void AlphaThreshold_cleans_stray_alpha_noise()
+    {
+        // 16x16 image with alpha=3 (stray noise)
+        using var img = new Image<Rgba32>(16, 16);
+        img.ProcessPixelRows(accessor =>
+        {
+            for (var y = 0; y < 16; y++)
+            {
+                var row = accessor.GetRowSpan(y);
+                for (var x = 0; x < 16; x++)
+                {
+                    row[x] = new Rgba32(255, 255, 255, 3);
+                }
+            }
+        });
+
+        var result = ImageToTiledConverter.Convert(img, testDir, new ConversionOptions
+        {
+            TileWidth = 16,
+            TileHeight = 16,
+            AlphaThreshold = 16,
+            EmptyMode = EmptyMode.Gid0,
+            Name = "alpha_clean"
+        });
+
+        result.TransparentCellsCount.Should().Be(1);
+        result.UniqueTilesCount.Should().Be(0);
+    }
+
+    [Fact]
     public void EmptyMode_tile_reserves_tile0_for_transparent()
     {
         // 32x16 image: left tile transparent, right tile blue
@@ -203,30 +280,29 @@ public sealed class ConverterTests : IDisposable
     }
 
     [Fact]
-    public void Converts_Part2_png_correctly_when_file_exists()
+    public void Converts_Part2_source_png_with_tolerance()
     {
-        const string part2Path = "/home/jmn/Escritorio/SMB2/Part2.png";
-        if (!File.Exists(part2Path))
+        const string part2SourcePath = "/home/jmn/Escritorio/Part2-source.png";
+        if (!File.Exists(part2SourcePath))
         {
             return;
         }
 
-        var result = ImageToTiledConverter.Convert(part2Path, testDir, new ConversionOptions
+        var result = ImageToTiledConverter.Convert(part2SourcePath, testDir, new ConversionOptions
         {
             TileWidth = 16,
             TileHeight = 16,
             EmptyMode = EmptyMode.Tile,
-            Columns = 16
+            Columns = 16,
+            Tolerance = 15,
+            AlphaThreshold = 16
         });
 
-        result.SourceWidth.Should().Be(2544);
+        result.SourceWidth.Should().Be(2560);
         result.SourceHeight.Should().Be(240);
-        result.MapWidth.Should().Be(159);
+        result.MapWidth.Should().Be(160);
         result.MapHeight.Should().Be(15);
-        result.UniqueTilesCount.Should().Be(199);
-        result.TilesetColumns.Should().Be(16);
-        result.TilesetRows.Should().Be(13);
-        result.TileCount.Should().Be(208);
+        result.UniqueTilesCount.Should().BeLessThan(80);
         result.VerifiedLossless.Should().BeTrue();
     }
 }

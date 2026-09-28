@@ -58,6 +58,12 @@ public sealed class CliOptions
     [Option("world-height", Required = false, HelpText = "Value for retrosharpWorldHeight custom property (default: map height).")]
     public int? WorldHeight { get; set; }
 
+    [Option('t', "tolerance", Default = 0, HelpText = "Tolerance threshold for tile deduplication (0 = exact match; 5..15 eliminates duplicates from compression or rounding noise).")]
+    public int Tolerance { get; set; } = 0;
+
+    [Option("alpha-threshold", Default = 16, HelpText = "Alpha threshold (0..255). Alpha <= threshold is treated as transparent; alpha >= 255 - threshold is treated as opaque.")]
+    public int AlphaThreshold { get; set; } = 16;
+
     [Option('f', "force", Required = false, HelpText = "Force overwrite existing files if they exist.")]
     public bool Force { get; set; }
 
