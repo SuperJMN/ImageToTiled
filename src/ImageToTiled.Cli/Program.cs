@@ -9,6 +9,13 @@ public static class Program
 {
     public static int Main(string[] args)
     {
+        if (args.Length > 0 && args[0].Equals("optimize", StringComparison.OrdinalIgnoreCase))
+        {
+            var remaining = System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Skip(args, 1));
+            return Parser.Default.ParseArguments<CliOptions>(remaining)
+                .MapResult(opts => { opts.Optimize = true; return Run(opts); }, _ => 1);
+        }
+
         return Parser.Default.ParseArguments<CliOptions>(args)
             .MapResult(Run, _ => 1);
     }
@@ -17,8 +24,67 @@ public static class Program
     {
         try
         {
-            var tileW = opts.TileSize ?? opts.TileWidth;
-            var tileH = opts.TileSize ?? opts.TileHeight;
+            var inputPath = opts.InputPath;
+            var isTmx = opts.Optimize ||
+                        inputPath.EndsWith(".tmx", StringComparison.OrdinalIgnoreCase) ||
+                        (System.IO.Directory.Exists(inputPath) && System.IO.Directory.GetFiles(inputPath, "*.tmx").Length > 0);
+
+            if (isTmx)
+            {
+                return RunOptimize(opts);
+            }
+
+            return RunConvert(opts);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error: {ex.Message}");
+            return 1;
+        }
+    }
+
+    private static int RunOptimize(CliOptions opts)
+    {
+        int? cols = null;
+        if (!string.IsNullOrWhiteSpace(opts.Columns) && int.TryParse(opts.Columns, NumberStyles.Integer, CultureInfo.InvariantCulture, out var c))
+        {
+            cols = c;
+        }
+
+        var optOptions = new OptimizationOptions
+        {
+            Tolerance = opts.Tolerance > 0 ? opts.Tolerance : 15,
+            AlphaThreshold = opts.AlphaThreshold,
+            Columns = cols,
+            OutputDirectory = opts.OutputDirectory,
+            PreserveUnusedTiles = opts.PreserveUnused,
+            Verify = !opts.NoVerify
+        };
+
+        var result = TiledMapOptimizer.Optimize(opts.InputPath, optOptions);
+
+        Console.WriteLine($"Successfully optimized TMX map '{result.TmxPath}':");
+        Console.WriteLine($"  Original Tileset: {result.OriginalTileCount} tiles");
+        Console.WriteLine($"  Optimized Tiles:  {result.OptimizedTileCount} tiles (sheet: {result.TilesetColumns} cols x {result.TilesetRows} rows)");
+        Console.WriteLine($"  Tolerance:        {optOptions.Tolerance} (alpha threshold: {optOptions.AlphaThreshold})");
+        Console.WriteLine($"  Layers Updated:   {result.LayersUpdatedCount}");
+        Console.WriteLine($"  Tileset Image:    {result.TilesetImagePath}");
+        Console.WriteLine($"  Tileset (TSX):    {result.TsxPath}");
+        Console.WriteLine($"  Map (TMX):        {result.TmxPath}");
+        if (result.VerifiedLossless)
+        {
+            Console.WriteLine(optOptions.Tolerance == 0
+                ? "  Pixel Fidelity:   100% EXACT LOSSLESS MATCH (Verified)"
+                : $"  Pixel Fidelity:   VERIFIED (all map cells match original within tolerance {optOptions.Tolerance})");
+        }
+
+        return 0;
+    }
+
+    private static int RunConvert(CliOptions opts)
+    {
+        var tileW = opts.TileSize ?? opts.TileWidth;
+        var tileH = opts.TileSize ?? opts.TileHeight;
 
             var autoSquare = false;
             int? cols = null;
@@ -105,11 +171,5 @@ public static class Program
             }
 
             return 0;
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"Error: {ex.Message}");
-            return 1;
-        }
     }
 }

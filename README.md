@@ -115,6 +115,17 @@ dotnet run --project src/ImageToTiled.Cli -- sprite_sheet.png \
   --empty-mode gid0
 ```
 
+#### 5. Optimización de un mapa Tiled existente (`.tmx`)
+Reduce la hoja de tiles de un mapa existente unificando tiles duplicados según la tolerancia especificada, remapeando las capas de tiles y preservando intactas capas adicionales (como colisiones) y propiedades personalizadas:
+
+```bash
+# Optimización in-place pasando el .tmx o la carpeta
+dotnet run --project src/ImageToTiled.Cli -- ./games/runner-lift/assets/maps/ -t 15
+
+# O con carpeta de salida diferente
+dotnet run --project src/ImageToTiled.Cli -- ./map.tmx -t 15 -o ./optimized/
+```
+
 ---
 
 ## Uso como biblioteca C#

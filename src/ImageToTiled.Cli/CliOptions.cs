@@ -4,8 +4,16 @@ using CommandLine;
 
 public sealed class CliOptions
 {
-    [Value(0, Required = true, MetaName = "image", HelpText = "Path to the input image file (PNG, etc.).")]
-    public string ImagePath { get; set; } = string.Empty;
+    [Value(0, Required = true, MetaName = "input", HelpText = "Path to input image file (PNG, etc.), or TMX map file / directory to optimize.")]
+    public string InputPath { get; set; } = string.Empty;
+
+    public string ImagePath => InputPath;
+
+    [Option("optimize", Required = false, HelpText = "Optimize an existing TMX map file or directory.")]
+    public bool Optimize { get; set; }
+
+    [Option("preserve-unused", Required = false, HelpText = "Preserve unused tiles when optimizing an existing TMX map.")]
+    public bool PreserveUnused { get; set; }
 
     [Option('o', "output-dir", Required = false, HelpText = "Output directory for generated files (default: same directory as input image).")]
     public string? OutputDirectory { get; set; }

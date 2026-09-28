@@ -305,4 +305,42 @@ public sealed class ConverterTests : IDisposable
         result.UniqueTilesCount.Should().BeLessThan(80);
         result.VerifiedLossless.Should().BeTrue();
     }
+
+    [Fact]
+    public void Optimizes_existing_tmx_map_with_tolerance()
+    {
+        using var img = new Image<Rgba32>(32, 16);
+        img.ProcessPixelRows(accessor =>
+        {
+            for (var y = 0; y < 16; y++)
+            {
+                var row = accessor.GetRowSpan(y);
+                for (var x = 0; x < 16; x++) row[x] = new Rgba32(0, 168, 0, 255);
+                for (var x = 16; x < 32; x++) row[x] = new Rgba32(0, 163, 0, 255);
+            }
+        });
+
+        var converted = ImageToTiledConverter.Convert(img, testDir, new ConversionOptions
+        {
+            TileWidth = 16,
+            TileHeight = 16,
+            Tolerance = 0,
+            EmptyMode = EmptyMode.None,
+            Name = "to_optimize"
+        });
+
+        converted.UniqueTilesCount.Should().Be(2);
+
+        var optOutDir = Path.Combine(testDir, "optimized");
+        var optResult = TiledMapOptimizer.Optimize(converted.TmxPath, new OptimizationOptions
+        {
+            Tolerance = 10,
+            OutputDirectory = optOutDir,
+            Verify = true
+        });
+
+        optResult.OriginalTileCount.Should().Be(2);
+        optResult.OptimizedTileCount.Should().Be(1);
+        optResult.VerifiedLossless.Should().BeTrue();
+    }
 }
